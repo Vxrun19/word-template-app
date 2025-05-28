@@ -3,15 +3,14 @@
 import streamlit as st
 from docx import Document
 from io import BytesIO
-import datetime
 
 st.set_page_config(page_title="Word Template Generator", layout="centered")
 st.title("📄 Word Template Generator")
 
-# --- Choose Template Type ---
+# Select template type
 template_type = st.radio("Select Document Type", ["ILI", "Quotation"])
 
-# --- Upload Template ---
+# Upload template
 template_file = st.file_uploader("Upload Word Template (.docx)", type=["docx"])
 
 if template_file:
@@ -19,8 +18,9 @@ if template_file:
         st.write("📝 Fill the required fields")
 
         if template_type == "ILI":
-            # ILI fields (same as original)
+            # ILI Template Fields
             st.subheader("🔹 General Info")
+            project_name = st.text_input("Project Name")
             client_name = st.text_input("Client Name")
             contact_person = st.text_input("Contact Person")
             offer_number = st.text_input("Offer Number")
@@ -47,7 +47,7 @@ if template_file:
             personnel_standby_rate = st.text_input("Personnel Standby Rate")
 
         elif template_type == "Quotation":
-            # Quotation fields based on placeholders
+            # Quotation Template Fields
             st.subheader("🔹 Quotation Info")
             project_title = st.text_input("Project Title")
             project_name = st.text_input("Project Name")
@@ -65,7 +65,6 @@ if template_file:
             duration2 = st.text_input("Inspection Duration")
             duration3 = st.text_input("Total Duration")
 
-            # Optional / standby costs
             mfl_tool_rerun = st.text_input("MFL Tool Re-run Cost")
             egp_tool_rerun = st.text_input("EGP Tool Re-run Cost")
             egp_additional_mob = st.text_input("EGP Additional Mobilization")
@@ -81,8 +80,8 @@ if template_file:
         replacements = {}
 
         if template_type == "ILI":
-            # Fill ILI placeholders
             replacements = {
+                "<<project_name>>": project_name,
                 "<<client_name>>": client_name,
                 "<<contact_person>>": contact_person,
                 "<<offer_number>>": offer_number,
@@ -101,11 +100,10 @@ if template_file:
                 "<<personnel_standby_rate>>": personnel_standby_rate,
             }
             for i in range(7):
-                replacements[f"<<segment_{i+1}>>"] = f"{pipe_diameter}x{segment_lengths[i]}"
+                replacements[f"<<segment_{i+1}>>"] = segment_lengths[i]
                 replacements[f"<<price_segment_{i+1}>>"] = prices[i]
 
         elif template_type == "Quotation":
-            # Fill quotation placeholders
             replacements = {
                 "<<project_title>>": project_title,
                 "<<project_name>>": project_name,
@@ -131,12 +129,13 @@ if template_file:
                 "<<egp_standby_rate>>": egp_standby_rate,
             }
 
-        # Perform replacement in doc
+        # Replace placeholders in paragraphs
         for para in doc.paragraphs:
             for key, val in replacements.items():
                 if key in para.text:
                     para.text = para.text.replace(key, val)
 
+        # Replace placeholders in tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
@@ -144,7 +143,7 @@ if template_file:
                         if key in cell.text:
                             cell.text = cell.text.replace(key, val)
 
-        # Save and offer download
+        # Save and provide download
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
@@ -152,6 +151,6 @@ if template_file:
         st.download_button(
             label="📥 Download Word Document",
             data=buffer,
-            file_name="Filled_Template.docx",
+            file_name=f"{template_type}_Filled_Document.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
