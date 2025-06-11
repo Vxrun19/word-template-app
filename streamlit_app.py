@@ -1,193 +1,142 @@
-# streamlit_app.py
-
 import streamlit as st
 from docx import Document
+import datetime
 from io import BytesIO
-from datetime import date
+import os
+import base64
+import tempfile
+from docx2pdf import convert
+import uuid
 
-# Set the Streamlit app page settings
-st.set_page_config(page_title="Word Template Generator", layout="centered")
-st.title("📄 Word Template Generator")
+def fill_placeholders(doc: Document, replacements: dict):
+    for p in doc.paragraphs:
+        for key, val in replacements.items():
+            if key in p.text:
+                inline = p.runs
+                for i in range(len(inline)):
+                    if key in inline[i].text:
+                        inline[i].text = inline[i].text.replace(key, val)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for key, val in replacements.items():
+                    if key in cell.text:
+                        cell.text = cell.text.replace(key, val)
 
-# Upload template file first
-st.subheader("📤 Upload Word Template")
-template_file = st.file_uploader("Upload your Word template (.docx)", type=["docx"])
+def generate_ili_offer(data):
+    template_path = "quotation_template_ili.docx"
+    doc = Document(template_path)
 
-# Proceed only if a template is uploaded
-if template_file:
-    # Select the type of document to generate
-    template_type = st.radio("📑 Select Document Type", ["ILI", "Quotation", "ILI Offer"])
+    replacements = {
+        "<<project_name>>": data["project_name"],
+        "<<client_name>>": data["client_name"],
+        "<<contact_person>>": data["contact_person"],
+        "<<offer_number>>": data["offer_number"],
+        "<<quotation_date>>": data["quotation_date"].strftime("%d-%m-%Y"),
+        "<<mobilization_days>>": str(data["mobilization_days"]),
+        "<<inspection_days>>": str(data["inspection_days"]),
+        "<<total_days>>": str(data["mobilization_days"] + data["inspection_days"]),
+        "<<pipe_diameter>>": str(data["pipe_diameter"]),
+        "<<mfl_tool_rerun>>": data["mfl_tool_rerun"],
+        "<<egp_tool_rerun>>": data["egp_tool_rerun"],
+        "<<egp_additional_mob>>": data["egp_additional_mob"],
+        "<<mfl_additional_mob>>": data["mfl_additional_mob"],
+        "<<personnel_additional_mob>>": data["personnel_additional_mob"],
+        "<<mfl_standby_rate>>": data["mfl_standby_rate"],
+        "<<egp_standby_rate>>": data["egp_standby_rate"],
+        "<<personnel_standby_rate>>": data["personnel_standby_rate"]
+    }
 
-    # Form to enter details
-    with st.form("input_form"):
-        st.write("📝 Fill the required fields")
+    for i in range(1, 8):
+        replacements[f"<<segment_{i}>>"] = data["segments"].get(f"segment_{i}", "")
+        replacements[f"<<price_segment_{i}>>"] = data["segments"].get(f"price_segment_{i}", "")
 
-        if template_type == "ILI":
-            st.subheader("🔹 General Info")
-            project_name = st.text_input("Project Name")
-            client_name = st.text_input("Client Name")
-            contact_person = st.text_input("Contact Person")
-            offer_number = st.text_input("Offer Number")
-            quotation_date = st.date_input("Quotation Date", value=date.today())
-            mobilization_days = st.text_input("Mobilization Days")
-            inspection_days = st.text_input("Inspection Days")
-            total_days = st.text_input("Total Duration (Days)")
-            pipe_diameter = st.text_input("Pipe Diameter (e.g., 16inch)")
+    fill_placeholders(doc, replacements)
 
-            st.subheader("🔹 Segment Lengths")
-            segment_lengths = [st.text_input(f"Segment {i+1} Length") for i in range(7)]
+    docx_buffer = BytesIO()
+    doc.save(docx_buffer)
+    docx_buffer.seek(0)
 
-            st.subheader("🔹 Segment Prices")
-            prices = [st.text_input(f"Price for Segment {i+1}") for i in range(7)]
+    # Save to temp .docx file
+    tmp_id = str(uuid.uuid4())
+    docx_path = os.path.join(tempfile.gettempdir(), f"{tmp_id}.docx")
+    pdf_path = os.path.join(tempfile.gettempdir(), f"{tmp_id}.pdf")
 
-            st.subheader("🔹 Additional Costs")
-            mfl_tool_rerun = st.text_input("MFL Tool Re-run Cost")
-            egp_tool_rerun = st.text_input("EGP Tool Re-run Cost")
-            egp_additional_mob = st.text_input("EGP Additional Mobilization")
-            mfl_additional_mob = st.text_input("MFL/TFI Additional Mobilization")
-            personnel_additional_mob = st.text_input("Personnel Additional Mobilization")
-            mfl_standby_rate = st.text_input("MFL/TFI Standby Rate")
-            egp_standby_rate = st.text_input("EGP Standby Rate")
-            personnel_standby_rate = st.text_input("Personnel Standby Rate")
+    with open(docx_path, "wb") as f:
+        f.write(docx_buffer.read())
 
-        elif template_type == "Quotation":
-            st.subheader("🔹 Quotation Info")
-            project_title = st.text_input("Project Title")
-            project_name = st.text_input("Project Name")
-            pipeline_size = st.text_input("Pipeline Size")
-            client_name = st.text_input("Client Name")
-            location = st.text_input("Location")
-            mail_subject = st.text_input("Subject")
-            service_type = st.text_input("Service Type")
-            service_description = st.text_input("Service Description")
-            uom_type = st.text_input("Unit of Measurement")
-            price = st.text_input("Base Price")
-            gst = st.text_input("GST Amount")
-            total_price = st.text_input("Total Price")
-            duration1 = st.text_input("Mobilization Duration")
-            duration2 = st.text_input("Inspection Duration")
-            duration3 = st.text_input("Total Duration")
+    # Convert DOCX to PDF
+    convert(docx_path, pdf_path)
 
-            mfl_tool_rerun = st.text_input("MFL Tool Re-run Cost")
-            egp_tool_rerun = st.text_input("EGP Tool Re-run Cost")
-            egp_additional_mob = st.text_input("EGP Additional Mobilization")
-            mfl_additional_mob = st.text_input("MFL/TFI Additional Mobilization")
-            personnel_additional_mob = st.text_input("Personnel Additional Mobilization")
-            mfl_standby_rate = st.text_input("MFL/TFI Standby Rate")
-            egp_standby_rate = st.text_input("EGP Standby Rate")
+    return docx_path, pdf_path
 
-        elif template_type == "ILI Offer":
-            st.subheader("🔹 ILI Offer Details")
-            project_name = st.text_input("Project Name")
-            client_name = st.text_input("Client Name")
-            pipe_diameter = st.text_input("Pipe Diameter")
-            offer_number = st.text_input("Offer Number")
-            quotation_date = st.date_input("Quotation Date", value=date.today())
-            tool_type = st.text_input("Tool Type")
-            inspection_km = st.text_input("Inspection Length (KM)")
-            unit_price = st.text_input("Unit Price")
-            total_price = st.text_input("Total Price")
-            mobilization_days = st.text_input("Mobilization Days")
-            inspection_days = st.text_input("Inspection Days")
-            total_days = st.text_input("Total Duration (Days)")
+def embed_pdf(file_path):
+    with open(file_path, "rb") as f:
+        base64_pdf = base64.b64encode(f.read()).decode("utf-8")
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600px" type="application/pdf"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
 
-        submitted = st.form_submit_button("Generate Document")
+# --- Streamlit UI ---
+st.title("ILI Offer Letter Generator")
 
-    if submitted:
-        doc = Document(template_file)
-        replacements = {}
+with st.form("ili_form"):
+    st.header("Project & Client Info")
+    project_name = st.text_input("Project Name")
+    client_name = st.text_input("Client Name")
+    contact_person = st.text_input("Contact Person")
+    offer_number = st.text_input("Offer Number")
+    quotation_date = st.date_input("Quotation Date", value=datetime.date.today())
 
-        if template_type == "ILI":
-            replacements = {
-                "<<project_name>>": project_name,
-                "<<client_name>>": client_name,
-                "<<contact_person>>": contact_person,
-                "<<offer_number>>": offer_number,
-                "<<quotation_date>>": quotation_date.strftime("%d/%m/%Y"),
-                "<<mobilization_days>>": mobilization_days,
-                "<<inspection_days>>": inspection_days,
-                "<<total_days>>": total_days,
-                "<<pipe_diameter>>": pipe_diameter,
-                "<<mfl_tool_rerun>>": mfl_tool_rerun,
-                "<<egp_tool_rerun>>": egp_tool_rerun,
-                "<<egp_additional_mob>>": egp_additional_mob,
-                "<<mfl_additional_mob>>": mfl_additional_mob,
-                "<<personnel_additional_mob>>": personnel_additional_mob,
-                "<<mfl_standby_rate>>": mfl_standby_rate,
-                "<<egp_standby_rate>>": egp_standby_rate,
-                "<<personnel_standby_rate>>": personnel_standby_rate,
-            }
-            for i in range(7):
-                replacements[f"<<segment_{i+1}>>"] = segment_lengths[i]
-                replacements[f"<<price_segment_{i+1}>>"] = prices[i]
+    st.header("Inspection Details")
+    mobilization_days = st.number_input("Mobilization Days", min_value=0, step=1)
+    inspection_days = st.number_input("Inspection Days", min_value=0, step=1)
+    pipe_diameter = st.text_input("Pipeline Diameter")
 
-        elif template_type == "Quotation":
-            replacements = {
-                "<<project_title>>": project_title,
-                "<<project_name>>": project_name,
-                "<<pipeline_size>>": pipeline_size,
-                "<<client_name>>": client_name,
-                "<<location>>": location,
-                "<<mail_subject>>": mail_subject,
-                "<<service_type>>": service_type,
-                "<<service_description>>": service_description,
-                "<<uom_type>>": uom_type,
-                "<<price>>": price,
-                "<<gst>>": gst,
-                "<<total_price>>": total_price,
-                "<<duration1>>": duration1,
-                "<<duration2>>": duration2,
-                "<<duration3>>": duration3,
-                "<<mfl_tool_rerun>>": mfl_tool_rerun,
-                "<<egp_tool_rerun>>": egp_tool_rerun,
-                "<<egp_additional_mob>>": egp_additional_mob,
-                "<<mfl_additional_mob>>": mfl_additional_mob,
-                "<<personnel_additional_mob>>": personnel_additional_mob,
-                "<<mfl_standby_rate>>": mfl_standby_rate,
-                "<<egp_standby_rate>>": egp_standby_rate,
-            }
+    st.header("Segment Pricing (max 7)")
+    segments = {}
+    for i in range(1, 8):
+        segments[f"segment_{i}"] = st.text_input(f"Segment {i} Description", key=f"seg{i}")
+        segments[f"price_segment_{i}"] = st.text_input(f"Segment {i} Price", key=f"price{i}")
 
-        elif template_type == "ILI Offer":
-            replacements = {
-                "<<project_name>>": project_name,
-                "<<client_name>>": client_name,
-                "<<pipe_diameter>>": pipe_diameter,
-                "<<offer_number>>": offer_number,
-                "<<quotation_date>>": quotation_date.strftime("%d/%m/%Y"),
-                "<<tool_type>>": tool_type,
-                "<<inspection_km>>": inspection_km,
-                "<<unit_price>>": unit_price,
-                "<<total_price>>": total_price,
-                "<<mobilization_days>>": mobilization_days,
-                "<<inspection_days>>": inspection_days,
-                "<<total_days>>": total_days,
-            }
+    st.header("Reruns & Additional Charges")
+    mfl_tool_rerun = st.text_input("MFL Tool Rerun Charge")
+    egp_tool_rerun = st.text_input("EGP Tool Rerun Charge")
+    egp_additional_mob = st.text_input("EGP Additional Mobilization Charge")
+    mfl_additional_mob = st.text_input("MFL Additional Mobilization Charge")
+    personnel_additional_mob = st.text_input("Personnel Additional Mobilization Charge")
 
-        # Replace placeholders in paragraphs
-        for para in doc.paragraphs:
-            for key, val in replacements.items():
-                if key in para.text:
-                    para.text = para.text.replace(key, val)
+    st.header("Standby Charges")
+    mfl_standby_rate = st.text_input("MFL Standby Rate per Day")
+    egp_standby_rate = st.text_input("EGP Standby Rate per Day")
+    personnel_standby_rate = st.text_input("Personnel Standby Rate per Day")
 
-        # Replace placeholders in tables
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for key, val in replacements.items():
-                        if key in cell.text:
-                            cell.text = cell.text.replace(key, val)
+    submitted = st.form_submit_button("Generate Offer")
 
-        # Save and provide download
-        buffer = BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        st.success("✅ Document generated successfully!")
-        st.download_button(
-            label="📥 Download Word Document",
-            data=buffer,
-            file_name=f"{template_type}_Filled_Document.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+if submitted:
+    data = {
+        "project_name": project_name,
+        "client_name": client_name,
+        "contact_person": contact_person,
+        "offer_number": offer_number,
+        "quotation_date": quotation_date,
+        "mobilization_days": mobilization_days,
+        "inspection_days": inspection_days,
+        "pipe_diameter": pipe_diameter,
+        "segments": segments,
+        "mfl_tool_rerun": mfl_tool_rerun,
+        "egp_tool_rerun": egp_tool_rerun,
+        "egp_additional_mob": egp_additional_mob,
+        "mfl_additional_mob": mfl_additional_mob,
+        "personnel_additional_mob": personnel_additional_mob,
+        "mfl_standby_rate": mfl_standby_rate,
+        "egp_standby_rate": egp_standby_rate,
+        "personnel_standby_rate": personnel_standby_rate
+    }
 
-else:
-    st.warning("📎 Please upload a Word template to begin.")
+    docx_path, pdf_path = generate_ili_offer(data)
+
+    st.success("Offer generated successfully!")
+    with open(docx_path, "rb") as f:
+        st.download_button("Download Word File", f, f"{offer_number}_ILI_Offer.docx")
+
+    embed_pdf(pdf_path)
