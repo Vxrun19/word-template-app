@@ -5,7 +5,7 @@ from io import BytesIO
 import os
 import base64
 import tempfile
-from docx2pdf import convert
+import pypandoc
 import uuid
 
 def fill_placeholders(doc: Document, replacements: dict):
@@ -66,9 +66,7 @@ def generate_ili_offer(data):
         f.write(docx_buffer.read())
 
     # Convert DOCX to PDF
-    convert(docx_path, pdf_path)
-
-    return docx_path, pdf_path
+    output = pypandoc.convert_file("quotation.docx", 'pdf', outputfile="quotation.pdf")
 
 def embed_pdf(file_path):
     with open(file_path, "rb") as f:
